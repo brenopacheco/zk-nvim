@@ -8,10 +8,57 @@ function M.notebook_root(notebook_path)
   return require("zk.root_pattern_util").root_pattern(".zk")(notebook_path)
 end
 
+---Opens global config.toml and try to parse the notebook's default directory.
+---See: https://github.com/mickael-menu/zk/pull/304/files
+---
+---@return string|nil The path to default notebook directory
+local function get_global_dir()
+  local path = tostring(vim.fn.expand("~/.config/zk/config.toml"))
+  if vim.fn.filereadable(path) ~= 1 then
+    return nil
+  end
+  ---@type string[]
+  local text = vim.fn.readfile(path)
+  local query = [[
+		(table 
+			(bare_key) @table_key
+			(#eq? @table_key "notebook")
+			(pair
+				(bare_key) @pair_key
+				(#eq? @pair_key "dir")
+				(string) @dir))
+	]]
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, text)
+  local lang = vim.treesitter.language.get_lang("toml")
+  if lang == nil then
+    vim.notify("zk-nvim: unable to read global config.toml - treesitter toml parser missing", vim.log.levels.WARN)
+    return nil
+  end
+  local parser = vim.treesitter.get_parser(bufnr, lang)
+  local parsed_query = vim.treesitter.query.parse("toml", query)
+  local tree = parser:parse()[1]
+  local root = tree:root()
+  local first, _, last, _ = root:range()
+  ---@type string|nil
+  local dir = nil
+  for _, match, _ in parsed_query:iter_matches(root, bufnr, first, last) do
+    for id, node in pairs(match) do
+      local name = parsed_query.captures[id]
+      if name == "dir" then
+        dir = string.gsub(vim.treesitter.get_node_text(node, bufnr), '"', "")
+      end
+    end
+  end
+  pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+  return dir
+end
+
 ---Try to resolve a notebook path by checking the following locations in that order
 ---1. current buffer path
 ---2. current working directory
 ---3. `$ZK_NOTEBOOK_DIR` environment variable
+---4. default notebook directory set `~/.config/zk/config.toml`.
 ---
 ---Note that the path will not necessarily be the notebook root.
 --
@@ -34,6 +81,10 @@ function M.resolve_notebook_path(bufnr)
       -- the buffer doesn't belong to a notebook, but the cwd does!
       path = cwd
     end
+  end
+  local dir = get_global_dir()
+  if dir ~= nil then
+    path = dir
   end
   -- at this point, the buffer either belongs to a notebook, or everything else failed
   return path

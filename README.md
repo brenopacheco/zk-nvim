@@ -96,6 +96,7 @@ following places and order:
 1. the current buffer path (i.e. the file you are currently editing),
 2. the current working directory,
 3. the `$ZK_NOTEBOOK_DIR` environment variable.
+4. the default notebook directory set `~/.config/zk/config.toml`.
 
 We recommend you to export the `$ZK_NOTEBOOK_DIR` environment variable, so that
 a notebook can always be found.

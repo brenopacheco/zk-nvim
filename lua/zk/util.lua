@@ -32,10 +32,14 @@ local function get_global_dir()
   vim.api.nvim_buf_set_lines(bufnr, 1, -1, false, text)
   local lang = vim.treesitter.language.get_lang("toml")
   if lang == nil then
-    vim.notify("zk-nvim: unable to read global config.toml - treesitter toml parser missing", vim.log.levels.WARN)
+    vim.notify(
+      "zk-nvim: unable to read global config.toml - treesitter toml parser missing",
+      vim.log.levels.WARN
+    )
     return nil
   end
   local parser = vim.treesitter.get_parser(bufnr, lang)
+  assert(parser, "Treesiter toml parser not found")
   local parsed_query = vim.treesitter.query.parse("toml", query)
   local tree = parser:parse()[1]
   local root = tree:root()
@@ -43,10 +47,12 @@ local function get_global_dir()
   ---@type string|nil
   local dir = nil
   for _, match, _ in parsed_query:iter_matches(root, bufnr, first, last) do
-    for id, node in pairs(match) do
+    for id, nodes in pairs(match) do
       local name = parsed_query.captures[id]
-      if name == "dir" then
-        dir = string.gsub(vim.treesitter.get_node_text(node, bufnr), '"', "")
+      for _, node in ipairs(nodes) do
+        if name == "dir" then
+          dir = string.gsub(vim.treesitter.get_node_text(node, bufnr), '"', "")
+        end
       end
     end
   end
